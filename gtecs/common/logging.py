@@ -6,16 +6,17 @@ import sys
 import time
 from logging import handlers
 
-from . import params
 
-
-def get_file_handler(name=None):
+def get_file_handler(name=None, logpath=None):
     """Get the file handler."""
     if name is not None:
         logfile = name + '.log'
     else:
         logfile = 'master.log'
-    fname = os.path.join(params.LOG_PATH, logfile)
+    if logpath is not None:
+        fname = os.path.join(logpath, logfile)
+    else:
+        fname = logfile
     file_handler = handlers.WatchedFileHandler(fname, delay=True)
 
     # formatter for stdout logging; does not include name of log
@@ -45,12 +46,11 @@ def get_stream_handler():
     return console
 
 
-def get_logger(name=None, log_stdout=False, log_to_file=True, log_to_stdout=True):
+def get_logger(name=None, out_path=None, log_stdout=False, log_to_file=True, log_to_stdout=True):
     """Provide standardised logging to all processes.
 
-    Each logger can write to stdout and a file name 'name.log'
-    in the appropriate log directory. If no name is provided,
-    the logger will write to a file called master.log
+    Each logger will write to stdout and a file name 'name.log'
+    in the directory given by `out_path`.
 
     By default all levels from DEBUG up are written to the logfile,
     and all levels from INFO up are written to stdout.
@@ -58,15 +58,13 @@ def get_logger(name=None, log_stdout=False, log_to_file=True, log_to_stdout=True
     This function will not rename logfiles based on the date. The idea is
     to use the UNIX utility logrotate to rotate the log files daily.
 
-    Use of this function should help reduce the myriad ways logging was
-    done under the pt5m software. The hope is also that it can tidy up
-    the way in which some scripts write some info to stdout and some to
-    a logfile, and the stdout info is then written to another logfile.
-
     Parameters
     ----------
     name : str
         the name of the logger, which is also used for the name of the logfile
+        if no name is given logs will be saved to `master.log`
+    out_path : str
+        where to save log files (default is the current directory)
     log_stdout : bool
         whether to log all stdout, not just log commands
     log_to_file : bool
@@ -109,7 +107,7 @@ def get_logger(name=None, log_stdout=False, log_to_file=True, log_to_stdout=True
 
     # add a file handler
     if log_to_file:
-        log.addHandler(get_file_handler(name))
+        log.addHandler(get_file_handler(name, out_path))
 
     # redirect system stdout
     if log_stdout:
@@ -137,7 +135,7 @@ class StreamToLogger(object):
         pass
 
 
-def set_logger_output(logger, log_to_file=True, log_to_stdout=True):
+def set_logger_output(logger, out_path=None, log_to_file=True, log_to_stdout=True):
     """Add or remove handlers to a logger to print to file or stdout.
 
     Parameters
@@ -159,7 +157,7 @@ def set_logger_output(logger, log_to_file=True, log_to_stdout=True):
 
     if log_to_file:
         if not already_has_file_logger:
-            logger.addHandler(get_file_handler(logger.name))
+            logger.addHandler(get_file_handler(logger.name, out_path))
     else:
         if already_has_file_logger:
             handler = logger.handlers[file_logger_truefalse.index(True)]
