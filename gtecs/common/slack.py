@@ -43,43 +43,38 @@ def send_message(text, channel, token, attachments=None, blocks=None, filepath=N
             if 'mrkdwn_in' not in attachment:
                 attachment['mrkdwn_in'] = ['text']
 
-        try:
-            if not filepath:
-                url = 'https://slack.com/api/chat.postMessage'
-                payload = {'token': token,
-                           'channel': channel,
-                           'as_user': True,
-                           'text': str(text),
-                           'attachments': json.dumps(attachments) if attachments else None,
-                           'blocks': json.dumps(blocks) if blocks else None,
-                           }
-                responce = requests.post(url, payload).json()
+    try:
+        if not filepath:
+            url = 'https://slack.com/api/chat.postMessage'
+            payload = {'token': token,
+                       'channel': channel,
+                       'as_user': True,
+                       'text': str(text),
+                       'attachments': json.dumps(attachments) if attachments else None,
+                       'blocks': json.dumps(blocks) if blocks else None,
+                       }
+            responce = requests.post(url, payload).json()
+        else:
+            url = 'https://slack.com/api/files.upload'
+            filename = os.path.basename(filepath)
+            name = os.path.splitext(filename)[0]
+            payload = {'token': token,
+                       'channels': channel,  # Note channel(s)
+                       'as_user': True,
+                       'filename': filename,
+                       'title': name,
+                       'initial_comment': text,
+                       }
+            with open(filepath, 'rb') as file:
+                responce = requests.post(url, payload, files={'file': file}).json()
+        if not responce.get('ok'):
+            if 'error' in responce:
+                raise Exception('Unable to send message: {}'.format(responce['error']))
             else:
-                url = 'https://slack.com/api/files.upload'
-                filename = os.path.basename(filepath)
-                name = os.path.splitext(filename)[0]
-                payload = {'token': token,
-                           'channels': channel,  # Note channel(s)
-                           'as_user': True,
-                           'filename': filename,
-                           'title': name,
-                           'initial_comment': text,
-                           }
-                with open(filepath, 'rb') as file:
-                    responce = requests.post(url, payload, files={'file': file}).json()
-            if not responce.get('ok'):
-                if 'error' in responce:
-                    raise Exception('Unable to send message: {}'.format(responce['error']))
-                else:
-                    raise Exception('Unable to send message')
-        except Exception as err:
-            print('Connection to Slack failed! - {}'.format(err))
-            print('Message:', text)
-            print('Attachments:', attachments)
-            print('Blocks:', blocks)
-            print('Filepath:', filepath)
-    else:
-        print('Slack Message:', text)
+                raise Exception('Unable to send message')
+    except Exception as err:
+        print('Connection to Slack failed! - {}'.format(err))
+        print('Message:', text)
         print('Attachments:', attachments)
         print('Blocks:', blocks)
         print('Filepath:', filepath)
