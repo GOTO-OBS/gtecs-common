@@ -6,7 +6,7 @@ import json
 import requests
 
 
-def send_slack_msg(text, channel, token, attachments=None, blocks=None, filepath=None):
+def send_message(text, channel, token, attachments=None, blocks=None, filepath=None):
     """Send a message to Slack.
 
     Parameters
