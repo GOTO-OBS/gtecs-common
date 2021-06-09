@@ -3,6 +3,8 @@ from setuptools import setup, find_namespace_packages
 
 
 REQUIRES = ['requests',
+            'configobj',
+            'validate',
             ]
 
 setup(name='gtecs-common',
