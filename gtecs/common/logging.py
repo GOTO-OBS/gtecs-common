@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+from io import TextIOBase
 from logging import handlers
 
 
@@ -117,7 +118,7 @@ def get_logger(name=None, out_path=None, log_stdout=False, log_to_file=True, log
     return log
 
 
-class StreamToLogger(object):
+class StreamToLogger(TextIOBase):
     """Fake file-like stream object that redirects writes to a logger instance."""
 
     def __init__(self, logger, log_level=logging.INFO):
