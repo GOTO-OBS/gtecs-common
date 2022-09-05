@@ -17,10 +17,10 @@ def get_file_handler(name, out_path=None):
     log_file = f'{name}.log'
     log_path = out_path / log_file
 
-    # formatter for stdout logging; does not include name of log
+    # formatter for file logging; does not include name of log (since it's the file name)
     formatter = logging.Formatter(
-        '%(asctime)s:%(levelname)s - %(message)s',
-        datefmt='%Y/%m/%d %H:%M:%S'
+        '%(asctime)s.%(msecs)03d:%(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
     formatter.converter = time.gmtime
 
@@ -35,7 +35,7 @@ def get_stream_handler():
     # formatter for stdout logging; includes name of log
     formatter = logging.Formatter(
         '%(asctime)s.%(msecs)03d:%(name)s:%(levelname)s - %(message)s',
-        datefmt='%Y/%m/%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
     formatter.converter = time.gmtime
 
