@@ -1,15 +1,10 @@
 """Package management functions."""
 
+import importlib.resources as pkg_resources
 import os
+from importlib.metadata import version
 
 import configobj
-
-from importlib.metadata import version
-try:
-    import importlib.resources as pkg_resources
-except ImportError:
-    # Python < 3.7
-    import importlib_resources as pkg_resources  # type: ignore
 
 import validate
 

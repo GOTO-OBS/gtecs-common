@@ -1,9 +1,10 @@
 """Setup script for the gtecs-common package."""
-from setuptools import setup, find_namespace_packages
+from setuptools import find_namespace_packages, setup
 
 
 REQUIRES = ['requests',
             'configobj',
+            'pid',
             ]
 
 setup(name='gtecs-common',
