@@ -21,7 +21,7 @@ def get_local_ip():
     s.settimeout(0)
     try:
         # doesn't even have to be reachable
-        s.connect(('10.255.255.255', 1))
+        s.connect(('10.55.55.55', 1))  # 10.255.255.255 sometimes gave permission denied errors?
         ip_addr = s.getsockname()[0]
     except Exception:
         ip_addr = '127.0.0.1'
