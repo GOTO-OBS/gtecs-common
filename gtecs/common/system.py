@@ -72,7 +72,7 @@ def kill_process(pid_name, host='127.0.0.1', verbose=False):
 
     command_string = 'kill -9 {}'.format(pid)
     if host not in ['127.0.0.1', get_local_ip()]:
-        command_string = "ssh {} '{}'".format(host, command_string)
+        command_string = "ssh {} '{}'".format(host, command_string)  # TODO: use fabric?
 
     if verbose:
         print(command_string)
@@ -123,7 +123,7 @@ def get_pid(pid_name, host='127.0.0.1', verbose=False):
         # NOTE this assumes the pid path is the same on the remote machine,
         # which should be now we've standardised on the ~/.config directory.
         # Unless they changed XDG_CONFIG_HOME for some reason...
-        command_string = "ssh {} '{}'".format(host, command_string)
+        command_string = "ssh {} '{}'".format(host, command_string)  # TODO: use fabric?
 
     if verbose:
         print(command_string)
@@ -147,7 +147,7 @@ def clear_pid(pid_name, host='127.0.0.1', verbose=False):
         # NOTE: This assumes the pid path is the same on the remote machine,
         # which should be now we've standardised on the ~/.config directory.
         # Unless they changed XDG_CONFIG_HOME for some reason...
-        command_string = "ssh {} '{}'".format(host, command_string)
+        command_string = "ssh {} '{}'".format(host, command_string)  # TODO: use fabric?
 
     if verbose:
         print(command_string)
