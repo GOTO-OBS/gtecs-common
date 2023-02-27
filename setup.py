@@ -6,6 +6,8 @@ REQUIRES = ['requests',
             'configobj',
             'fabric',
             'pid',
+            'pymysql',
+            'sqlalchemy',
             ]
 
 setup(name='gtecs-common',
