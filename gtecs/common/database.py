@@ -61,19 +61,21 @@ def get_engine(user, password, db_name='gtecs', host='localhost', dialect='postg
         if 'postgres' in dialect:
             url = os.path.join(url, 'postgres')
 
+    connect_args = {}
     if dialect == 'mysql':
         dialect = 'mysql+pymysql'
-        encoding_arg = 'charset'
+        connect_args['charset'] = encoding
     elif dialect == 'postgres':
         dialect = 'postgresql'
-        encoding_arg = 'client_encoding'
+        connect_args['client_encoding'] = encoding
+        connect_args['application_name'] = 'python (gtecs)'
     else:
         raise ValueError(f'Unknown SQL dialect: {dialect}')
-    url = f'{dialect.lower()}://{url}?{encoding_arg}={encoding}'
 
-    engine = create_engine(url,
+    engine = create_engine(f'{dialect.lower()}://{url}',
                            echo=echo,
                            pool_pre_ping=pool_pre_ping,
+                           connect_args=connect_args,
                            **kwargs,
                            )
     return engine
