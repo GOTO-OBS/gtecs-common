@@ -141,13 +141,13 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
         with engine.connect() as conn:
             # First drop the database, if overwrite is true
             if overwrite:
-                conn.execute(f'DROP DATABASE IF EXISTS `{db_name}`')
+                conn.execute(text(f'DROP DATABASE IF EXISTS `{db_name}`'))
             # Now try creating the new database
             try:
                 create_command = f'CREATE DATABASE `{db_name}`'
                 # Set default encoding to UTF8 (see https://dba.stackexchange.com/questions/76788)
                 create_command += ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
-                conn.execute(create_command)
+                conn.execute(text(create_command))
             except ProgrammingError as err:
                 if 'exists' in str(err):
                     err_str = f'Database "{db_name}" already exists (and overwrite=False)'
@@ -164,8 +164,8 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
             try:
                 # postgres does not allow you to create/drop databases inside transactions
                 # (https://stackoverflow.com/a/8977109)
-                conn.execute('commit')
-                conn.execute(f'CREATE DATABASE {db_name}')
+                conn.execute(text('commit'))
+                conn.execute(text(f'CREATE DATABASE {db_name}'))
             except ProgrammingError as err:
                 if 'exists' in str(err):
                     # We don't actually mind if the *database* exists, we want to reset the *schema*
@@ -182,13 +182,13 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
         with engine.connect() as conn:
             # First drop the schema, if overwrite is true
             if overwrite:
-                conn.execute(f'DROP SCHEMA IF EXISTS {name} CASCADE')
+                conn.execute(text(f'DROP SCHEMA IF EXISTS {name} CASCADE'))
             # Now try creating the new schema
             try:
-                conn.execute(f'CREATE SCHEMA {name}')
-                conn.execute('commit')
+                conn.execute(text(f'CREATE SCHEMA {name}'))
+                conn.execute(text('commit'))
                 if description is not None:
-                    conn.execute(f"COMMENT ON SCHEMA {name} IS '{description}'")
+                    conn.execute(text(f"COMMENT ON SCHEMA {name} IS '{description}'"))
             except ProgrammingError as err:
                 if 'exists' in str(err):
                     err_str = f'Schema "gtecs.{name}" already exists (and overwrite=False)'
@@ -202,6 +202,7 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
 
     # Finally execute any functions or triggers in pure SQL
     if sql_code is not None:
-        for code in sql_code:
-            with engine.connect() as conn:
+        with engine.connect() as conn:
+            for code in sql_code:
                 conn.execute(text(code))
+                conn.commit()
