@@ -8,7 +8,7 @@ REQUIRES = ['requests',
             'pid',
             'pymysql',
             'psycopg2',
-            'sqlalchemy>=1.4',
+            'sqlalchemy>=2',
             ]
 
 setup(name='gtecs-common',
