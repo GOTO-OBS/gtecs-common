@@ -89,7 +89,11 @@ def send_message(text, channel, token,
             message_ts = response['ts']
         else:
             # We want to get the timestamp of the message, not the file
-            message_ts = response['file']['shares']['private'][channel][0]['ts']
+            # It could be a public or private channel
+            try:
+                message_ts = response['file']['shares']['public'][channel][0]['ts']
+            except KeyError:
+                message_ts = response['file']['shares']['private'][channel][0]['ts']
 
         try:
             # Get permalink for the message identified by the timestamp
