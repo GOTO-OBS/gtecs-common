@@ -7,7 +7,7 @@ REQUIRES = ['requests',
             'fabric',
             'pid',
             'pymysql',
-            'psycopg2',
+            # 'psycopg2',  # remove as requirement as it requires postgresql to be installed
             'sqlalchemy>=2',
             ]
 
