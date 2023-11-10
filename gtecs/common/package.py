@@ -56,8 +56,7 @@ def load_config(package, config_file, remote_host=None, remote_user=None):
                 paths.append(result)
 
     # Load package configspec file
-    package_files = pkg_resources.files(f'gtecs.{package}.data')
-    with open(package_files.joinpath('configspec.ini')) as spec_file:
+    with pkg_resources.open_text(f'gtecs.{package}.data', 'configspec.ini') as spec_file:
         spec = ConfigObj(spec_file, _inspec=True)
 
     # Search all possible paths for the config file
