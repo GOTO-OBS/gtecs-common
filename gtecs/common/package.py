@@ -56,12 +56,11 @@ def load_config(package, config_file, remote_host=None, remote_user=None):
                 paths.append(result)
 
     # Load package configspec file
-    spec = pkg_resources.read_text(f'gtecs.{package}.data', 'configspec.ini').split('\n')
-
-    # Create empty spec for default parameters, in case we don't find any file
-    config = ConfigObj({}, configspec=spec)
+    with pkg_resources.open_text(f'gtecs.{package}.data', 'configspec.ini') as spec_file:
+        spec = ConfigObj(spec_file, _inspec=True)
 
     # Search all possible paths for the config file
+    config = None
     config_filepath = None
     for path in paths:
         for file in filenames:
@@ -84,6 +83,10 @@ def load_config(package, config_file, remote_host=None, remote_user=None):
                 except FileNotFoundError:
                     pass
 
+    # We didn't find a file, so just create an empty config to get default parameters
+    if config is None:
+        config = ConfigObj({}, configspec=spec)
+
     # Validate ConfigObj, filling defaults from configspec if missing from config file
     validator = validate.Validator()
     result = config.validate(validator)
@@ -91,6 +94,12 @@ def load_config(package, config_file, remote_host=None, remote_user=None):
         print('Config file validation failed')
         print([k for k in result if not result[k]])
         raise ValueError(f'{config_file} config file validation failed')
+
+    # Also report any keys in the config that are not in the spec
+    # This is useful for catching typos or any deprecated parameters
+    for key in config.keys():
+        if key not in spec:
+            print(f'Warning: {key} in {config_filepath.split("/")[-1]} is not in the configspec')
 
     return config, spec, config_filepath
 

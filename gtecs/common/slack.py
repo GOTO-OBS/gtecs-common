@@ -117,6 +117,7 @@ def send_message(text, channel, token,
         print('Attachments:', attachments)
         print('Blocks:', blocks)
         print('Filepath:', filepath)
+        return
 
     if return_link:
         if not filepath:
