@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 from slack_sdk import WebClient
 
@@ -118,17 +119,35 @@ def send_message(text, channel, token,
         return
 
     if return_link:
-        if not filepath:
-            message_ts = response['ts']
-        else:
-            # We want to get the timestamp of the message, not the file
-            # It could be a public or private channel
-            try:
-                message_ts = response['file']['shares']['public'][channel][0]['ts']
-            except KeyError:
-                message_ts = response['file']['shares']['private'][channel][0]['ts']
-
         try:
+            if not filepath:
+                message_ts = response['ts']
+            else:
+                # We want to get the timestamp of the message, not the file
+                # Annoyingly, with v2 Slack now scans all files and won't return the
+                # sharing message immediately
+                # (see https://github.com/slackapi/python-slack-sdk/issues/1329)
+                # So we have to wait and check the file info until the message is available.
+                shares = None
+                if len(response['file']['shares']) != 0:
+                    shares = response['file']['shares']
+                else:
+                    file_id = response['file']['id']
+                    start_time = time.time()
+                    timeout = 30
+                    while not shares:
+                        if time.time() - start_time > timeout:
+                            raise TimeoutError('Timeout waiting for file to be shared')
+                        response = client.files_info(file=file_id)
+                        if len(response['file']['shares']) != 0:
+                            shares = response['file']['shares']
+                        time.sleep(0.5)
+
+                share_type = list(shares.keys())[0]  # 'public' or 'private'
+                if channel not in shares[share_type]:
+                    raise ValueError('File not shared in correct channel?')
+                message_ts = shares[share_type][channel][-1]['ts']  # Get the latest share ts
+
             # Get permalink for the message identified by the timestamp
             response = client.chat_getPermalink(
                 channel=channel,
