@@ -3,7 +3,7 @@
 import json
 import os
 
-import requests
+from slack_sdk import WebClient
 
 
 def send_message(text, channel, token,
@@ -83,33 +83,26 @@ def send_message(text, channel, token,
         text = None
 
     try:
+        client = WebClient(token=token)
         if not filepath:
-            url = 'https://slack.com/api/chat.postMessage'
-            payload = {'token': token,
-                       'channel': channel,
-                       'text': str(text),
-                       'attachments': json.dumps(attachments) if attachments else None,
-                       'blocks': json.dumps(blocks) if blocks else None,
-                       'username': username,
-                       'icon_emoji': icon_emoji,
-                       **kwargs,
-                       }
-            response = requests.post(url, payload).json()
+            response = client.chat_postMessage(
+                channel=channel,
+                text=str(text),
+                attachments=json.dumps(attachments) if attachments else None,
+                blocks=json.dumps(blocks) if blocks else None,
+                username=username,
+                icon_emoji=icon_emoji,
+                **kwargs,
+            )
         else:
-            url = 'https://slack.com/api/files.upload'
-            filename = os.path.basename(filepath)
-            name = os.path.splitext(filename)[0]
-            payload = {'token': token,
-                       'channels': channel,  # Note channel(s)
-                       'as_user': True,
-                       'filename': filename,
-                       'title': name,
-                       'initial_comment': str(text),
-                       **kwargs,
-                       }
-            with open(filepath, 'rb') as file:
-                response = requests.post(url, payload, files={'file': file}).json()
-
+            response = client.files_upload_v2(
+                channel=channel,
+                initial_comment=str(text),
+                file=filepath,
+                filename=os.path.basename(filepath),
+                title=os.path.splitext(os.path.basename(filepath))[0],
+                **kwargs,
+            )
         if not response.get('ok'):
             if 'error' in response:
                 raise Exception('Unable to send message: {}'.format(response['error']))
@@ -137,16 +130,15 @@ def send_message(text, channel, token,
 
         try:
             # Get permalink for the message identified by the timestamp
-            url = 'https://slack.com/api/chat.getPermalink'
-            payload = {'token': token,
-                       'channel': channel,
-                       'message_ts': message_ts,
-                       }
-            response = requests.post(url, payload).json()
-
+            response = client.chat_getPermalink(
+                channel=channel,
+                message_ts=message_ts,
+            )
             if not response.get('ok'):
                 if 'error' in response:
                     raise Exception('Unable to retrieve permalink: {}'.format(response['error']))
+                else:
+                    raise Exception('Unable to send message')
 
             return response['permalink']
 
