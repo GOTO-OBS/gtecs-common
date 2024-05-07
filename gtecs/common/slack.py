@@ -77,6 +77,11 @@ def send_message(text, channel, token,
             if 'mrkdwn_in' not in attachment:
                 attachment['mrkdwn_in'] = ['text']
 
+    # If blocks are included you can't give text, you have to add it as the first block.
+    if blocks and text:
+        blocks.insert(0, {'type': 'section', 'text': {'type': 'mrkdwn', 'text': text}})
+        text = None
+
     try:
         if not filepath:
             url = 'https://slack.com/api/chat.postMessage'
