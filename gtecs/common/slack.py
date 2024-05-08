@@ -2,8 +2,9 @@
 
 import json
 import os
+import time
 
-import requests
+from slack_sdk import WebClient
 
 
 def send_message(text, channel, token,
@@ -77,34 +78,32 @@ def send_message(text, channel, token,
             if 'mrkdwn_in' not in attachment:
                 attachment['mrkdwn_in'] = ['text']
 
-    try:
-        if not filepath:
-            url = 'https://slack.com/api/chat.postMessage'
-            payload = {'token': token,
-                       'channel': channel,
-                       'text': str(text),
-                       'attachments': json.dumps(attachments) if attachments else None,
-                       'blocks': json.dumps(blocks) if blocks else None,
-                       'username': username,
-                       'icon_emoji': icon_emoji,
-                       **kwargs,
-                       }
-            response = requests.post(url, payload).json()
-        else:
-            url = 'https://slack.com/api/files.upload'
-            filename = os.path.basename(filepath)
-            name = os.path.splitext(filename)[0]
-            payload = {'token': token,
-                       'channels': channel,  # Note channel(s)
-                       'as_user': True,
-                       'filename': filename,
-                       'title': name,
-                       'initial_comment': str(text),
-                       **kwargs,
-                       }
-            with open(filepath, 'rb') as file:
-                response = requests.post(url, payload, files={'file': file}).json()
+    # If blocks are included you can't give text, you have to add it as the first block.
+    if blocks and text:
+        blocks.insert(0, {'type': 'section', 'text': {'type': 'mrkdwn', 'text': text}})
+        text = None
 
+    try:
+        client = WebClient(token=token)
+        if not filepath:
+            response = client.chat_postMessage(
+                channel=channel,
+                text=str(text),
+                attachments=json.dumps(attachments) if attachments else None,
+                blocks=json.dumps(blocks) if blocks else None,
+                username=username,
+                icon_emoji=icon_emoji,
+                **kwargs,
+            )
+        else:
+            response = client.files_upload_v2(
+                channel=channel,
+                initial_comment=str(text),
+                file=filepath,
+                filename=os.path.basename(filepath),
+                title=os.path.splitext(os.path.basename(filepath))[0],
+                **kwargs,
+            )
         if not response.get('ok'):
             if 'error' in response:
                 raise Exception('Unable to send message: {}'.format(response['error']))
@@ -120,28 +119,45 @@ def send_message(text, channel, token,
         return
 
     if return_link:
-        if not filepath:
-            message_ts = response['ts']
-        else:
-            # We want to get the timestamp of the message, not the file
-            # It could be a public or private channel
-            try:
-                message_ts = response['file']['shares']['public'][channel][0]['ts']
-            except KeyError:
-                message_ts = response['file']['shares']['private'][channel][0]['ts']
-
         try:
-            # Get permalink for the message identified by the timestamp
-            url = 'https://slack.com/api/chat.getPermalink'
-            payload = {'token': token,
-                       'channel': channel,
-                       'message_ts': message_ts,
-                       }
-            response = requests.post(url, payload).json()
+            if not filepath:
+                message_ts = response['ts']
+            else:
+                # We want to get the timestamp of the message, not the file
+                # Annoyingly, with v2 Slack now scans all files and won't return the
+                # sharing message immediately
+                # (see https://github.com/slackapi/python-slack-sdk/issues/1329)
+                # So we have to wait and check the file info until the message is available.
+                shares = None
+                if len(response['file']['shares']) != 0:
+                    shares = response['file']['shares']
+                else:
+                    file_id = response['file']['id']
+                    start_time = time.time()
+                    timeout = 30
+                    while not shares:
+                        if time.time() - start_time > timeout:
+                            raise TimeoutError('Timeout waiting for file to be shared')
+                        response = client.files_info(file=file_id)
+                        if len(response['file']['shares']) != 0:
+                            shares = response['file']['shares']
+                        time.sleep(0.5)
 
+                share_type = list(shares.keys())[0]  # 'public' or 'private'
+                if channel not in shares[share_type]:
+                    raise ValueError('File not shared in correct channel?')
+                message_ts = shares[share_type][channel][-1]['ts']  # Get the latest share ts
+
+            # Get permalink for the message identified by the timestamp
+            response = client.chat_getPermalink(
+                channel=channel,
+                message_ts=message_ts,
+            )
             if not response.get('ok'):
                 if 'error' in response:
                     raise Exception('Unable to retrieve permalink: {}'.format(response['error']))
+                else:
+                    raise Exception('Unable to send message')
 
             return response['permalink']
 

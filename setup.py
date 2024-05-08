@@ -2,7 +2,7 @@
 from setuptools import find_namespace_packages, setup
 
 
-REQUIRES = ['requests',
+REQUIRES = ['slack_sdk>=3.20.1',
             'configobj',
             'fabric',
             'pid',
