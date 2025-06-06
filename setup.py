@@ -6,8 +6,7 @@ REQUIRES = ['slack_sdk>=3.20.1',
             'configobj',
             'fabric',
             'pid',
-            'pymysql',
-            # 'psycopg2',  # remove as requirement as it requires postgresql to be installed
+            # 'psycopg2',  # requires postgresql to be installed, requirement for obs/alert only
             'sqlalchemy>=2',
             ]
 
