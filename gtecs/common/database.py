@@ -7,7 +7,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import sessionmaker
 
 
-def get_engine(user, password, db_name='gtecs', host='localhost',
+def get_engine(user, password, host='localhost', db_name='gtecs',
                encoding='utf8', echo=False, pool_pre_ping=True,
                **kwargs):
     """Create a new database engine.
@@ -19,10 +19,10 @@ def get_engine(user, password, db_name='gtecs', host='localhost',
     password : str
         The password to use when connecting to the database.
 
-    db_name : str, default='gtecs'
-        The name of the database to connect to.
     host : str, default='localhost'
         The host name to use when connecting to the database.
+    db_name : str, default='gtecs'
+        The name of the database to connect to.
     encoding : str, default='utf8'
         The encoding to use when connecting to the database.
     echo : bool, default=False
@@ -71,7 +71,7 @@ def get_session(*args, **kwargs):
     return session
 
 
-def create_database(base, name, user, password, host='localhost',
+def create_database(base, user, password, host='localhost', schema_name=None,
                     overwrite=False, description=None, sql_code=None, verbose=False,
                     **kwargs):
     """Create the database with empty tables.
@@ -80,8 +80,6 @@ def create_database(base, name, user, password, host='localhost',
     ----------
     base : sqlalchemy.ext.declarative.declarative_base
         The base class containing metadata which defines the database tables.
-    name : str
-        The name of the database schema to create under the 'gtecs' database.
     user : str
         The user name to use when connecting to the database.
     password : str
@@ -89,6 +87,9 @@ def create_database(base, name, user, password, host='localhost',
 
     host : str, default='localhost'
         The host name to use when connecting to the database.
+    schema_name : str, optional
+        The name of the database schema to create under the 'gtecs' database.
+        If not given then all schemas for tables defined in the base class are created.
     overwrite : bool, optional
         If True and the database already exists then drop it before creating the new one.
         If False and the database already exists then an error is raised.
@@ -107,10 +108,13 @@ def create_database(base, name, user, password, host='localhost',
 
     """
     # First connect to the postgres database to create the gtecs database
+    # The usual engine connection is to the 'gtecs' database, but we can't connect
+    # if it doesn't exist yet!
     engine = get_engine(user, password, host, db_name=None, echo=verbose, **kwargs)
     with engine.connect() as conn:
         # Try creating the new database
         try:
+            print(f'Creating database: gtecs with owner {user}')
             # postgres does not allow you to create/drop databases inside transactions
             # (https://stackoverflow.com/a/8977109)
             conn.execute(text('commit'))
@@ -126,24 +130,39 @@ def create_database(base, name, user, password, host='localhost',
     # Now connect to the actual gtecs database
     engine = get_engine(user, password, host, echo=verbose, **kwargs)
     with engine.connect() as conn:
-        # First drop the schema, if overwrite is true
-        if overwrite:
-            conn.execute(text(f'DROP SCHEMA IF EXISTS {name} CASCADE'))
-        # Now try creating the new schema
-        try:
-            conn.execute(text(f'CREATE SCHEMA {name}'))
-            conn.execute(text('commit'))
-            if description is not None:
-                conn.execute(text(f"COMMENT ON SCHEMA {name} IS '{description}'"))
-        except ProgrammingError as err:
-            if 'exists' in str(err):
-                err_str = f'Schema "gtecs.{name}" already exists (and overwrite=False)'
-                raise ValueError(err_str) from err
-            else:
-                raise
+        # If a schema name is given then we only create that schema,
+        # otherwise we create all schemas defined in the base class
+        if schema_name is None:
+            schemas = set(
+                t.schema for t in base.metadata.tables.values()
+                if t.schema is not None
+            )
+        else:
+            schemas = [schema_name]
+        for schema in schemas:
+            print(f'Creating schema: gtecs.{schema}')
+            # First drop the schema, if overwrite is true
+            if overwrite:
+                conn.execute(text(f'DROP SCHEMA IF EXISTS {schema} CASCADE'))
+            # Now try creating the new schema
+            try:
+                conn.execute(text(f'CREATE SCHEMA {schema}'))
+                conn.execute(text('commit'))
+                if description is not None:
+                    conn.execute(text(f"COMMENT ON SCHEMA {schema} IS '{description}'"))
+            except ProgrammingError as err:
+                if 'exists' in str(err):
+                    err_str = f'Schema "gtecs.{schema}" already exists (and overwrite=False)'
+                    raise ValueError(err_str) from err
+                else:
+                    raise
 
     # Fill the new database/schema with tables defined in the base class
-    base.metadata.create_all(engine)
+    # Note we only create tables for the selected schema(s)
+    tables = [t for t in base.metadata.tables.values() if t.schema in schemas]
+    for table in tables:
+        print(f'Creating table: {table.schema}.{table.name}')
+    base.metadata.create_all(engine, tables=tables)
 
     # Finally execute any functions or triggers in pure SQL
     if sql_code is not None:
