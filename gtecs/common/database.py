@@ -2,23 +2,12 @@
 
 import os
 
-import numpy as np
-
-import pymysql
-
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import sessionmaker
 
 
-# Encode Numpy floats
-# https://stackoverflow.com/questions/46205532/
-pymysql.converters.encoders[np.float64] = pymysql.converters.escape_float
-pymysql.converters.conversions = pymysql.converters.encoders.copy()
-pymysql.converters.conversions.update(pymysql.converters.decoders)
-
-
-def get_engine(user, password, db_name='gtecs', host='localhost', dialect='postgres',
+def get_engine(user, password, host='localhost', db_name='gtecs',
                encoding='utf8', echo=False, pool_pre_ping=True,
                **kwargs):
     """Create a new database engine.
@@ -30,12 +19,10 @@ def get_engine(user, password, db_name='gtecs', host='localhost', dialect='postg
     password : str
         The password to use when connecting to the database.
 
-    db_name : str, default='gtecs'
-        The name of the database to connect to.
     host : str, default='localhost'
         The host name to use when connecting to the database.
-    dialect : str, default='postgres'
-        The SQL dialect to use.
+    db_name : str, default='gtecs'
+        The name of the database to connect to.
     encoding : str, default='utf8'
         The encoding to use when connecting to the database.
     echo : bool, default=False
@@ -57,22 +44,14 @@ def get_engine(user, password, db_name='gtecs', host='localhost', dialect='postg
     if db_name:
         url = os.path.join(url, db_name)
     else:
-        # db_name = None is used when creating databases
-        if 'postgres' in dialect:
-            url = os.path.join(url, 'postgres')
+        # db_name = None is used to connect to the "postgres" database
+        url = os.path.join(url, 'postgres')
 
     connect_args = {}
-    if dialect == 'mysql':
-        dialect = 'mysql+pymysql'
-        connect_args['charset'] = encoding
-    elif dialect == 'postgres':
-        dialect = 'postgresql'
-        connect_args['client_encoding'] = encoding
-        connect_args['application_name'] = 'python (gtecs)'
-    else:
-        raise ValueError(f'Unknown SQL dialect: {dialect}')
+    connect_args['client_encoding'] = encoding
+    connect_args['application_name'] = 'python (gtecs)'
 
-    engine = create_engine(f'{dialect.lower()}://{url}',
+    engine = create_engine(f'postgresql://{url}',
                            echo=echo,
                            pool_pre_ping=pool_pre_ping,
                            connect_args=connect_args,
@@ -92,7 +71,7 @@ def get_session(*args, **kwargs):
     return session
 
 
-def create_database(base, name, user, password, host='localhost', dialect='postgres',
+def create_database(base, user, password, host='localhost', schema_name=None,
                     overwrite=False, description=None, sql_code=None, verbose=False,
                     **kwargs):
     """Create the database with empty tables.
@@ -101,10 +80,6 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
     ----------
     base : sqlalchemy.ext.declarative.declarative_base
         The base class containing metadata which defines the database tables.
-    name : str, optional
-        The name of the database to create.
-        If dialect='mysql' then the database will be called 'gtecs_{name}'.
-        If dialect='postgres' then the database is 'gtecs' and the schema will be {name}.
     user : str
         The user name to use when connecting to the database.
     password : str
@@ -112,16 +87,15 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
 
     host : str, default='localhost'
         The host name to use when connecting to the database.
-    dialect : str, optional
-        SQL dialect to use.
-        Must be either 'mysql' or 'postgres'.
-        Default: 'postgres'
+    schema_name : str, optional
+        The name of the database schema to create under the 'gtecs' database.
+        If not given then all schemas for tables defined in the base class are created.
     overwrite : bool, optional
         If True and the database already exists then drop it before creating the new one.
         If False and the database already exists then an error is raised.
         Default: False
     description : str, optional
-        Any comment to add to the schema (only matters if dialect='postgres').
+        Any comment to add to the schema.
         Default: None
     sql_code : list of str, optional
         Any SQL code to execute after creating the database.
@@ -133,74 +107,62 @@ def create_database(base, name, user, password, host='localhost', dialect='postg
         Additional keyword arguments to pass to `get_engine`.
 
     """
-    if dialect not in ['mysql', 'postgres']:
-        raise ValueError(f'Unknown SQL dialect: {dialect}')
+    # First connect to the postgres database to create the gtecs database
+    # The usual engine connection is to the 'gtecs' database, but we can't connect
+    # if it doesn't exist yet!
+    engine = get_engine(user, password, host, db_name=None, echo=verbose, **kwargs)
+    with engine.connect() as conn:
+        # Try creating the new database
+        try:
+            print(f'Creating database: gtecs with owner {user}')
+            # postgres does not allow you to create/drop databases inside transactions
+            # (https://stackoverflow.com/a/8977109)
+            conn.execute(text('commit'))
+            conn.execute(text(f'CREATE DATABASE gtecs WITH OWNER {user}'))
+        except ProgrammingError as err:
+            if 'exists' in str(err):
+                # We don't actually mind if the *database* exists, we want to reset the *schema*
+                # Plus there might be other schemas in the database that we don't want to drop!
+                pass
+            else:
+                raise
 
-    if dialect == 'mysql':
-        db_name = f'gtecs_{name}'
-        engine = get_engine(user, password, host=host,
-                            db_name=db_name, dialect='mysql', echo=verbose, **kwargs)
-        with engine.connect() as conn:
-            # First drop the database, if overwrite is true
-            if overwrite:
-                conn.execute(text(f'DROP DATABASE IF EXISTS `{db_name}`'))
-            # Now try creating the new database
-            try:
-                create_command = f'CREATE DATABASE `{db_name}`'
-                # Set default encoding to UTF8 (see https://dba.stackexchange.com/questions/76788)
-                create_command += ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
-                conn.execute(text(create_command))
-            except ProgrammingError as err:
-                if 'exists' in str(err):
-                    err_str = f'Database "{db_name}" already exists (and overwrite=False)'
-                    raise ValueError(err_str) from err
-                else:
-                    raise
-
-    elif dialect == 'postgres':
-        db_name = 'gtecs'
-        # First connect to "None" database
-        engine = get_engine(user, password, db_name=None, echo=verbose, **kwargs)
-        with engine.connect() as conn:
-            # Try creating the new database
-            try:
-                # postgres does not allow you to create/drop databases inside transactions
-                # (https://stackoverflow.com/a/8977109)
-                conn.execute(text('commit'))
-                conn.execute(text(f'CREATE DATABASE {db_name}'))
-            except ProgrammingError as err:
-                if 'exists' in str(err):
-                    # We don't actually mind if the *database* exists, we want to reset the *schema*
-                    # Plus there might be other schemas in the database that we don't want to drop!
-                    pass
-                else:
-                    raise
-
-        # Now connect to the actual database
-        engine = get_engine(user, password, echo=verbose, **kwargs)
-        # Get the schema name from the base if not given
-        if name is None:
-            name = base.metadata.schema
-        with engine.connect() as conn:
+    # Now connect to the actual gtecs database
+    engine = get_engine(user, password, host, echo=verbose, **kwargs)
+    with engine.connect() as conn:
+        # If a schema name is given then we only create that schema,
+        # otherwise we create all schemas defined in the base class
+        if schema_name is None:
+            schemas = set(
+                t.schema for t in base.metadata.tables.values()
+                if t.schema is not None
+            )
+        else:
+            schemas = [schema_name]
+        for schema in schemas:
+            print(f'Creating schema: gtecs.{schema}')
             # First drop the schema, if overwrite is true
             if overwrite:
-                conn.execute(text(f'DROP SCHEMA IF EXISTS {name} CASCADE'))
+                conn.execute(text(f'DROP SCHEMA IF EXISTS {schema} CASCADE'))
             # Now try creating the new schema
             try:
-                conn.execute(text(f'CREATE SCHEMA {name}'))
+                conn.execute(text(f'CREATE SCHEMA {schema}'))
                 conn.execute(text('commit'))
                 if description is not None:
-                    conn.execute(text(f"COMMENT ON SCHEMA {name} IS '{description}'"))
+                    conn.execute(text(f"COMMENT ON SCHEMA {schema} IS '{description}'"))
             except ProgrammingError as err:
                 if 'exists' in str(err):
-                    err_str = f'Schema "gtecs.{name}" already exists (and overwrite=False)'
+                    err_str = f'Schema "gtecs.{schema}" already exists (and overwrite=False)'
                     raise ValueError(err_str) from err
                 else:
                     raise
 
-    # Now fill the new database/schema with tables defined in the base class
-    engine = get_engine(user, password, db_name=db_name, dialect=dialect, echo=verbose, **kwargs)
-    base.metadata.create_all(engine)
+    # Fill the new database/schema with tables defined in the base class
+    # Note we only create tables for the selected schema(s)
+    tables = [t for t in base.metadata.tables.values() if t.schema in schemas]
+    for table in tables:
+        print(f'Creating table: {table.schema}.{table.name}')
+    base.metadata.create_all(engine, tables=tables)
 
     # Finally execute any functions or triggers in pure SQL
     if sql_code is not None:
